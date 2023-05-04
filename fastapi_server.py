@@ -3,7 +3,7 @@ from track_3 import track_data, country_balls_amount
 import asyncio
 import glob
 import numpy as np
-import cv2
+
 
 from deepsort.tracker import DeepSortTracker
 from current_detection import Detection
@@ -12,17 +12,23 @@ from current_detection import Detection
 app = FastAPI(title='Tracker assignment')
 imgs = glob.glob('imgs/*')
 country_balls = [{'cb_id': x, 'img': imgs[x % len(imgs)]} for x in range(country_balls_amount)]
+traker = []
+new_id = 0
 print('Started')
 
+
+def euclid_distance(b1, b2):
+    x1, y1 = (b1[0] + b1[2]) // 2, (b1[1] + b1[3]) // 2
+    x2, y2 = (b2[0] + b2[2]) // 2, (b2[1] + b2[3]) // 2
+    distance = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
+    return distance
 
 def tracker_soft(el):
     """
     Необходимо изменить у каждого словаря в списке значение поля 'track_id' так,
     чтобы как можно более длительный период времени 'track_id' соответствовал
     одному и тому же кантри болу.
-
     Исходные данные: координаты рамки объектов
-
     Ограничения:
     - необходимо использовать как можно меньше ресурсов (представьте, что
     вы используете embedded устройство, например Raspberri Pi 2/3).
@@ -30,8 +36,46 @@ def tracker_soft(el):
     вашего трекера, использовать его в алгоритме трекера запрещено
     - запрещается присваивать один и тот же track_id разным объектам на одном фрейме
     """
-    return el
 
+    frame_data = el["data"]
+    frame_id = el["frame_id"]
+
+    if frame_id == 1:
+        for obj in frame_data:
+            global new_id
+            obj["track_id"] = new_id
+            new_id += 1
+        traker.append(frame_data)
+        return el
+    prev_frame = traker[-1]
+    cur_frame = frame_data
+
+    for obj in cur_frame:
+        dist_list = []
+        i_dist_list = []
+        if len(obj['bounding_box']) != 0:
+            for obi in prev_frame:
+                if len(obi['bounding_box']) != 0:
+                    index = obi['track_id']
+                    distance = euclid_distance(obj['bounding_box'], obi['bounding_box'])
+                    dist_list.append(distance)
+                    i_d = {'index': index, 'distance': distance}
+                    i_dist_list.append(i_d)
+            if len(dist_list) != 0:
+                min_dist = min(dist_list)
+                for i in i_dist_list:
+                    if i['distance'] == min_dist and i['distance'] < 160:
+                        a = i['index']
+                        obj['track_id'] = a
+                        for ob in prev_frame:
+                            if ob['track_id'] == a:
+                                prev_frame.remove(ob)
+    for obj in cur_frame:
+        if obj["track_id"] is None and len(obj["bounding_box"]) != 0:
+            obj["track_id"] = new_id
+            new_id += 1
+    traker.append(cur_frame)
+    return el
 
 def tracker_strong(el):
     """
@@ -116,7 +160,7 @@ async def websocket_endpoint(websocket: WebSocket):
     for el in track_data:
         await asyncio.sleep(0.5)
         # TODO: part 1
-        # el = tracker_soft(el)
+        #el = tracker_soft(el)
         # TODO: part 2
         el = tracker_strong(el)
         # отправка информации по фрейму
