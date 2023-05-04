@@ -1,5 +1,5 @@
 from fastapi import FastAPI, WebSocket
-from track_3 import track_data, country_balls_amount
+from track_10102 import track_data, country_balls_amount
 import asyncio
 import glob
 import numpy as np
@@ -160,9 +160,9 @@ async def websocket_endpoint(websocket: WebSocket):
     for el in track_data:
         await asyncio.sleep(0.5)
         # TODO: part 1
-        #el = tracker_soft(el)
+        el = tracker_soft(el)
         # TODO: part 2
-        el = tracker_strong(el)
+        # el = tracker_strong(el)
         # отправка информации по фрейму
         await websocket.send_json(el)
     print('Accuracy:', calc_tracker_metrics(track_data))
